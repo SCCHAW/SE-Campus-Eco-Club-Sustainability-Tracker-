@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Leaf, Calendar, MapPin, Users } from "lucide-react";
-import { authAPI } from "../services/api";
+import { authAPI, eventAPI } from "../services/api";
 
 function Home() {
   const navigate = useNavigate();
@@ -22,29 +22,26 @@ function Home() {
     }
   }
 
-  const [events] = useState([
-    {
-      id: 1,
-      title: "Recycling Awareness Workshop",
-      date: "July 15, 2026",
-      location: "MMU Cyberjaya, MPH Hall",
-      attendees: 250,
-    },
-    {
-      id: 2,
-      title: "Green Tech Conference",
-      date: "August 22, 2026",
-      location: "MMU Cyberjaya, Dewan Tun Canselor",
-      attendees: 500,
-    },
-    {
-      id: 3,
-      title: "Beach Cleanup Drive",
-      date: "September 10, 2026",
-      location: "Cyberjaya Beach",
-      attendees: 180,
-    },
-  ]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch approved events on component mount
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true);
+        // Fetch only upcoming approved events
+        const response = await eventAPI.getAllEvents({ upcoming: true });
+        setEvents(response.events || []);
+      } catch (error) {
+        console.error('Failed to fetch events:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
@@ -77,7 +74,15 @@ function Home() {
                 Event
               </button>
               <button
-                onClick={() => navigate("/user-dashboard")}
+                onClick={() => {
+                  if (user?.role === 'volunteer') {
+                    navigate("/volunteer-dashboard");
+                  } else if (user?.role === 'organizer') {
+                    navigate("/organizer-dashboard");
+                  } else {
+                    navigate("/user-dashboard");
+                  }
+                }}
                 className="text-gray-600 hover:text-green-600 transition"
               >
                 User Dashboard
@@ -121,52 +126,75 @@ function Home() {
         </div>
 
         {/* Events Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
-            >
-              {/* Event Image Placeholder */}
-              <div className="h-48 bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
-                <Calendar className="w-16 h-16 text-white opacity-50" />
-              </div>
-
-              {/* Event Details */}
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
-                  {event.title}
-                </h3>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center text-gray-600">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    <span className="text-sm">{event.date}</span>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+            <p className="mt-4 text-gray-600">Loading events...</p>
+          </div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-12">
+            <Calendar className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+            <p className="text-xl text-gray-600">No approved events available at the moment.</p>
+            <p className="text-gray-500 mt-2">Check back soon for upcoming events!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {events.map((event) => {
+              const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              });
+              
+              return (
+                <div
+                  key={event.id}
+                  className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+                >
+                  {/* Event Image Placeholder */}
+                  <div className="h-48 bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
+                    <Calendar className="w-16 h-16 text-white opacity-50" />
                   </div>
 
-                  <div className="flex items-center text-gray-600">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    <span className="text-sm">{event.location}</span>
-                  </div>
+                  {/* Event Details */}
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">
+                      {event.title}
+                    </h3>
 
-                  <div className="flex items-center text-gray-600">
-                    <Users className="w-4 h-4 mr-2" />
-                    <span className="text-sm">{event.attendees} attendees</span>
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-gray-600">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        <span className="text-sm">{eventDate}</span>
+                      </div>
+
+                      {event.location && (
+                        <div className="flex items-center text-gray-600">
+                          <MapPin className="w-4 h-4 mr-2" />
+                          <span className="text-sm">{event.location}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center text-gray-600">
+                        <Users className="w-4 h-4 mr-2" />
+                        <span className="text-sm">{event.participant_count || 0} participants</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        navigate("/event-detail", { state: { event } })
+                      }
+                      className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition font-semibold"
+                    >
+                      View Details
+                    </button>
                   </div>
                 </div>
-
-                <button
-                  onClick={() =>
-                    navigate("/event-detail", { state: { event } })
-                  }
-                  className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition font-semibold"
-                >
-                  View Details
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* FOR DEVELOPER */}
 

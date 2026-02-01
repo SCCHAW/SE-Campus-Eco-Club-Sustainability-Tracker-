@@ -490,10 +490,51 @@ export const notificationAPI = {
   },
 };
 
+// Profile API calls
+export const profileAPI = {
+  // Get user profile
+  getProfile: async () => {
+    const response = await fetch(`${API_URL}/profile`, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch profile');
+    }
+    
+    return data;
+  },
+
+  // Update user profile
+  updateProfile: async (profileData) => {
+    const response = await fetch(`${API_URL}/profile`, {
+      method: 'PUT',
+      headers: getHeaders(true),
+      body: JSON.stringify(profileData),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update profile');
+    }
+
+    // Update localStorage with new user data
+    if (data.user) {
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+    
+    return data;
+  },
+};
+
 export default {
   auth: authAPI,
   user: userAPI,
   recycling: recyclingAPI,
   event: eventAPI,
   notification: notificationAPI,
+  profile: profileAPI,
 };

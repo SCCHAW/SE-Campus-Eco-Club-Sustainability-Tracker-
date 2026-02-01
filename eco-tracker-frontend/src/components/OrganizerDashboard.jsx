@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, Bell, User, Leaf, Plus, Edit, Send } from "lucide-react";
-import { authAPI, eventAPI, notificationAPI } from "../services/api";
+import { authAPI, eventAPI, notificationAPI, profileAPI } from '../services/api';
 
 function OrganizerDashboard() {
   const navigate = useNavigate();
@@ -9,8 +9,12 @@ function OrganizerDashboard() {
   
   const userString = localStorage.getItem("user");
   const user = userString ? JSON.parse(userString) : null;
-  const [username] = useState(user?.name || 'Organizer User');
-  const [email] = useState(user?.email || 'organizer@example.com');
+  const [profile, setProfile] = useState({
+    name: user?.name || 'Organizer User',
+    email: user?.email || 'organizer@example.com',
+    eco_points: user?.eco_points || 0,
+    role: user?.role || 'organizer'
+  });
   
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,10 +27,13 @@ function OrganizerDashboard() {
     title: '',
     event_type: 'cleanup',
     date: '',
+    time: '',
     location: '',
     description: '',
     points: '',
-    participantsNeeded: ''
+    participantsNeeded: '',
+    agenda: '',
+    requirements: ''
   });
 
   const [eventNotification, setEventNotification] = useState({
@@ -35,10 +42,27 @@ function OrganizerDashboard() {
     message: ''
   });
 
-  // Fetch events on component mount
+  // Fetch events, notifications, and profile on component mount
   useEffect(() => {
     fetchEvents();
     fetchNotifications();
+    fetchProfile();
+  }, []);
+
+  // Refetch profile when window regains focus (after returning from EditProfile)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchProfile();
+    };
+    const handleProfileUpdate = () => {
+      fetchProfile();
+    };
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('profile-updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('profile-updated', handleProfileUpdate);
+    };
   }, []);
 
   const fetchEvents = async () => {
@@ -67,6 +91,18 @@ function OrganizerDashboard() {
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const data = await profileAPI.getProfile();
+      setProfile(data.user);
+      // Also update localStorage to keep it in sync
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...currentUser, ...data.user }));
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setNewEvent(prev => ({
@@ -83,8 +119,11 @@ function OrganizerDashboard() {
         event_type: newEvent.event_type,
         location: newEvent.location,
         event_date: newEvent.date,
+        event_time: newEvent.time || null,
         max_participants: parseInt(newEvent.participantsNeeded) || null,
-        eco_points_reward: parseInt(newEvent.points) || 10
+        eco_points_reward: parseInt(newEvent.points) || 10,
+        agenda: newEvent.agenda || null,
+        requirements: newEvent.requirements || null
       };
 
       await eventAPI.createEvent(eventData);
@@ -93,10 +132,13 @@ function OrganizerDashboard() {
         title: '', 
         event_type: 'cleanup',
         date: '', 
+        time: '',
         location: '', 
         description: '', 
         points: '', 
-        participantsNeeded: '' 
+        participantsNeeded: '',
+        agenda: '',
+        requirements: ''
       });
       
       // Refresh events list
@@ -184,7 +226,7 @@ function OrganizerDashboard() {
 
       {/* Dashboard Title */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">'{username.toUpperCase()}' DASHBOARD</h2>
+        <h2 className="text-3xl font-bold text-gray-800 mb-2">'{profile.name.toUpperCase()}' DASHBOARD</h2>
         <p className="text-gray-600">Event Organizer Dashboard</p>
       </div>
 
@@ -362,6 +404,17 @@ function OrganizerDashboard() {
                 />
               </div>
               <div>
+                <label className="block text-gray-800 font-semibold mb-2">Event Time</label>
+                <input 
+                  type="time"
+                  name="time"
+                  value={newEvent.time}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-green-600 focus:outline-none" 
+                  placeholder="Start time"
+                />
+              </div>
+              <div>
                 <label className="block text-gray-800 font-semibold mb-2">Location</label>
                 <input 
                   type="text"
@@ -403,6 +456,28 @@ function OrganizerDashboard() {
                   onChange={handleInputChange}
                   className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-green-600 focus:outline-none"
                   placeholder="Enter event description"
+                ></textarea>
+              </div>
+              <div>
+                <label className="block text-gray-800 font-semibold mb-2">Event Agenda</label>
+                <textarea 
+                  rows={3}
+                  name="agenda"
+                  value={newEvent.agenda}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-green-600 focus:outline-none"
+                  placeholder="Enter agenda items (one per line)&#10;Example:&#10;09:00 AM - Registration&#10;10:00 AM - Opening Ceremony&#10;11:00 AM - Main Activity"
+                ></textarea>
+              </div>
+              <div>
+                <label className="block text-gray-800 font-semibold mb-2">What to Bring / Requirements</label>
+                <textarea 
+                  rows={3}
+                  name="requirements"
+                  value={newEvent.requirements}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-green-600 focus:outline-none"
+                  placeholder="Enter requirements (one per line)&#10;Example:&#10;- Bring your own water bottle&#10;- Wear comfortable clothing&#10;- Sun protection"
                 ></textarea>
               </div>
               <button 
@@ -509,13 +584,13 @@ function OrganizerDashboard() {
               <div className="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center mb-4">
                 <User className="w-12 h-12 text-white" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-800">{username}</h3>
+              <h3 className="text-2xl font-bold text-gray-800">{profile.name}</h3>
               <p className="text-gray-600">Event Organizer</p>
             </div>
             <div className="space-y-4">
               <div className="border-b pb-4">
                 <p className="text-gray-600 text-sm">Email</p>
-                <p className="text-gray-800 font-medium">{email}</p>
+                <p className="text-gray-800 font-medium">{profile.email}</p>
               </div>
               <div className="border-b pb-4">
                 <p className="text-gray-600 text-sm">Total Events Organized</p>

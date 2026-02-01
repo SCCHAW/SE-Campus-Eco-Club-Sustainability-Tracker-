@@ -18,9 +18,12 @@ CREATE TABLE IF NOT EXISTS events (
     event_type TEXT CHECK(event_type IN ('cleanup', 'awareness', 'workshop', 'other')) NOT NULL,
     location TEXT,
     event_date DATETIME NOT NULL,
+    event_time TEXT,
     organizer_id INTEGER NOT NULL,
     max_participants INTEGER,
     eco_points_reward INTEGER DEFAULT 10,
+    agenda TEXT,
+    requirements TEXT,
     status TEXT CHECK(status IN ('pending', 'upcoming', 'ongoing', 'completed', 'cancelled')) DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organizer_id) REFERENCES users(id)

@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { status, organizer_id, upcoming } = req.query;
-    let query = 'SELECT e.*, u.name as organizer_name FROM events e JOIN users u ON e.organizer_id = u.id WHERE 1=1';
+    let query = 'SELECT e.*, u.name as organizer_name, u.email as organizer_email FROM events e JOIN users u ON e.organizer_id = u.id WHERE 1=1';
     const params = [];
 
     if (status) {
@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
     }
 
     if (upcoming === 'true') {
-      query += ' AND e.event_date >= datetime("now") AND e.status != "cancelled"';
+      query += ' AND e.event_date >= datetime("now") AND e.status IN ("upcoming", "ongoing")';
     }
 
     query += ' ORDER BY e.event_date DESC';
@@ -102,8 +102,11 @@ router.post('/', authenticateToken, authorizeRoles('organizer'), async (req, res
       event_type,
       location,
       event_date,
+      event_time,
       max_participants,
-      eco_points_reward
+      eco_points_reward,
+      agenda,
+      requirements
     } = req.body;
 
     // Validation
@@ -118,17 +121,20 @@ router.post('/', authenticateToken, authorizeRoles('organizer'), async (req, res
 
     // Create event
     const result = await dbRun(
-      `INSERT INTO events (title, description, event_type, location, event_date, organizer_id, max_participants, eco_points_reward, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      `INSERT INTO events (title, description, event_type, location, event_date, event_time, organizer_id, max_participants, eco_points_reward, agenda, requirements, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         title,
         description,
         event_type,
         location,
         event_date,
+        event_time || null,
         req.user.id,
         max_participants || null,
-        eco_points_reward || 10
+        eco_points_reward || 10,
+        agenda || null,
+        requirements || null
       ]
     );
 
@@ -166,8 +172,11 @@ router.put('/:id', authenticateToken, authorizeRoles('organizer'), async (req, r
       event_type,
       location,
       event_date,
+      event_time,
       max_participants,
       eco_points_reward,
+      agenda,
+      requirements,
       status
     } = req.body;
 
@@ -204,9 +213,21 @@ router.put('/:id', authenticateToken, authorizeRoles('organizer'), async (req, r
       updates.push('event_date = ?');
       params.push(event_date);
     }
+    if (event_time !== undefined) {
+      updates.push('event_time = ?');
+      params.push(event_time);
+    }
     if (max_participants !== undefined) {
       updates.push('max_participants = ?');
       params.push(max_participants);
+    }
+    if (agenda !== undefined) {
+      updates.push('agenda = ?');
+      params.push(agenda);
+    }
+    if (requirements !== undefined) {
+      updates.push('requirements = ?');
+      params.push(requirements);
     }
     if (eco_points_reward !== undefined) {
       updates.push('eco_points_reward = ?');

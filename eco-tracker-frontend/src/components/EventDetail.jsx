@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { eventAPI } from "../services/api";
 import { 
   ArrowLeft, 
   Calendar, 
@@ -47,10 +48,10 @@ function EventDetail() {
     }) : 'TBA',
     location: eventData.location || 'Location TBA',
     attendees: eventData.participant_count || 0,
-    time: eventData.event_date ? new Date(eventData.event_date).toLocaleTimeString('en-US', {
+    time: eventData.event_time || (eventData.event_date ? new Date(eventData.event_date).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit'
-    }) + ' - TBA' : 'Time TBA',
+    }) + ' - TBA' : 'Time TBA'),
     points: eventData.eco_points_reward || 10,
     description: eventData.description || 'No description available.',
     longDescription: eventData.description || 'No detailed description available for this event.',
@@ -60,14 +61,18 @@ function EventDetail() {
     spotsLeft: eventData.spots_available || (eventData.max_participants - eventData.participant_count) || 0,
     category: eventData.event_type ? eventData.event_type.charAt(0).toUpperCase() + eventData.event_type.slice(1) : 'Event',
     status: eventData.status,
-    requirements: [
-      'Bring your own water bottle',
-      'Wear comfortable clothing',
-      'Be on time for the event'
-    ],
-    agenda: [
-      { time: 'Check event details', activity: 'Event timing and agenda will be announced by the organizer' }
-    ],
+    requirements: eventData.requirements 
+      ? eventData.requirements.split('\n').filter(line => line.trim()).map(line => line.replace(/^[-•*]\s*/, '').trim())
+      : ['Details will be announced by the organizer'],
+    agenda: eventData.agenda
+      ? eventData.agenda.split('\n').filter(line => line.trim()).map(line => {
+          const parts = line.split('-');
+          if (parts.length >= 2) {
+            return { time: parts[0].trim(), activity: parts.slice(1).join('-').trim() };
+          }
+          return { time: 'TBA', activity: line.trim() };
+        })
+      : [{ time: 'Check event details', activity: 'Event timing and agenda will be announced by the organizer' }],
     tags: [
       eventData.event_type || 'Event',
       'Sustainability',
@@ -78,16 +83,44 @@ function EventDetail() {
 
   const [isRegistered, setIsRegistered] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [checkingRegistration, setCheckingRegistration] = useState(true);
 
-  const handleRegister = () => {
+  // Check if user is already registered for this event
+  useEffect(() => {
+    const checkRegistration = async () => {
+      try {
+        const data = await eventAPI.getMyRegisteredEvents();
+        const registered = data.events?.some(e => e.id === event.id);
+        setIsRegistered(registered);
+      } catch (err) {
+        console.error('Error checking registration:', err);
+      } finally {
+        setCheckingRegistration(false);
+      }
+    };
+
+    checkRegistration();
+  }, [event.id]);
+
+  const handleRegister = async () => {
     if (isRegistered) {
       if (window.confirm('Are you sure you want to cancel your registration?')) {
-        setIsRegistered(false);
-        alert('Registration cancelled successfully!');
+        try {
+          await eventAPI.unregisterFromEvent(event.id);
+          setIsRegistered(false);
+          alert('Registration cancelled successfully!');
+        } catch (err) {
+          alert(`Error cancelling registration: ${err.message}`);
+        }
       }
     } else {
-      setIsRegistered(true);
-      alert(`Successfully registered for ${event.title}! You will earn ${event.points} eco-points upon completion.`);
+      try {
+        await eventAPI.registerForEvent(event.id);
+        setIsRegistered(true);
+        alert(`Successfully registered for ${event.title}! You will earn ${event.points} eco-points upon completion.`);
+      } catch (err) {
+        alert(`Error registering for event: ${err.message}`);
+      }
     }
   };
 
@@ -320,21 +353,23 @@ function EventDetail() {
 
                 {/* Registration Button */}
                 <button
-                  onClick={handleRegistration}
-                  disabled={event.status === 'cancelled' || event.status === 'completed' || (event.spotsLeft === 0 && event.capacity > 0)}
+                  onClick={handleRegister}
+                  disabled={checkingRegistration || event.status === 'cancelled' || event.status === 'completed' || (event.spotsLeft === 0 && event.capacity > 0 && !isRegistered)}
                   className={`w-full py-3 px-4 rounded-lg font-semibold transition ${
-                    event.status === 'cancelled' || event.status === 'completed' || (event.spotsLeft === 0 && event.capacity > 0)
+                    checkingRegistration || event.status === 'cancelled' || event.status === 'completed' || (event.spotsLeft === 0 && event.capacity > 0 && !isRegistered)
                       ? 'bg-gray-400 cursor-not-allowed text-white'
                       : isRegistered
                       ? 'bg-red-600 hover:bg-red-700 text-white'
                       : 'bg-green-600 hover:bg-green-700 text-white'
                   }`}
                 >
-                  {event.status === 'cancelled' 
+                  {checkingRegistration
+                    ? 'Checking...'
+                    : event.status === 'cancelled' 
                     ? 'Event Cancelled' 
                     : event.status === 'completed'
                     ? 'Event Completed'
-                    : event.spotsLeft === 0 && event.capacity > 0
+                    : event.spotsLeft === 0 && event.capacity > 0 && !isRegistered
                     ? 'Event Full'
                     : isRegistered 
                     ? 'Cancel Registration' 

@@ -96,7 +96,7 @@ function EventsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              Register Event
+              Join Event
             </button>
             <button
               onClick={() => setActiveTab('submit')}
@@ -163,17 +163,7 @@ function EventsPage() {
                       <button
                         onClick={() => navigate('/event-detail', { 
                           state: { 
-                            event: {
-                              id: selectedEvent.id,
-                              title: selectedEvent.title,
-                              date: new Date(selectedEvent.event_date).toLocaleDateString(),
-                              location: selectedEvent.location,
-                              attendees: selectedEvent.participant_count || 0,
-                              points: selectedEvent.eco_points_reward,
-                              capacity: selectedEvent.max_participants,
-                              spotsLeft: selectedEvent.spots_available,
-                              description: selectedEvent.description
-                            }
+                            event: selectedEvent
                           } 
                         })}
                         className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition font-semibold shadow-md hover:shadow-lg"
@@ -200,28 +190,38 @@ function EventsPage() {
                 <p className="text-center text-gray-600">No events available to join.</p>
               ) : (
                 <div className="space-y-4 max-w-3xl mx-auto">
-                  {events.map((event) => (
-                    <div key={event.id} className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold text-gray-800 mb-2">{event.title}</h3>
-                          <p className="text-gray-600 mb-3">{event.description || 'No description available.'}</p>
-                          <div className="space-y-1 text-sm text-gray-700">
-                            <p><span className="font-semibold">Date:</span> {new Date(event.event_date).toLocaleDateString()}</p>
-                            <p><span className="font-semibold">Location:</span> {event.location || 'N/A'}</p>
-                            <p><span className="font-semibold">Eco-Points:</span> +{event.eco_points_reward} points</p>
-                            <p><span className="font-semibold">Available Spots:</span> {event.spots_available !== null ? event.spots_available : 'Unlimited'}</p>
+                  {events.map((event) => {
+                    const isJoined = joinedEvents.some(e => e.id === event.id);
+                    
+                    return (
+                      <div key={event.id} className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">{event.title}</h3>
+                            <p className="text-gray-600 mb-3">{event.description || 'No description available.'}</p>
+                            <div className="space-y-1 text-sm text-gray-700">
+                              <p><span className="font-semibold">Date:</span> {new Date(event.event_date).toLocaleDateString()}</p>
+                              <p><span className="font-semibold">Location:</span> {event.location || 'N/A'}</p>
+                              <p><span className="font-semibold">Eco-Points:</span> +{event.eco_points_reward} points</p>
+                              <p><span className="font-semibold">Available Spots:</span> {event.spots_available !== null ? event.spots_available : 'Unlimited'}</p>
+                            </div>
                           </div>
+                          {isJoined ? (
+                            <div className="ml-4 px-6 py-3 bg-green-100 text-green-700 rounded-lg font-semibold whitespace-nowrap border-2 border-green-600">
+                              ✓ Registered
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleJoinEvent(event)}
+                              className="ml-4 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold whitespace-nowrap"
+                            >
+                              Join Event
+                            </button>
+                          )}
                         </div>
-                        <button
-                          onClick={() => handleJoinEvent(event)}
-                          className="ml-4 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold whitespace-nowrap"
-                        >
-                          Join Event
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

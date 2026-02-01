@@ -1,60 +1,23 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, Trophy, Award, Bell, User, Leaf } from "lucide-react";
-import { notificationAPI } from "../services/api";
+import { notificationAPI, eventAPI, profileAPI, authAPI } from "../services/api";
 
 function UserDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('events');
   const userString = localStorage.getItem("user");
   const user = userString ? JSON.parse(userString) : null;
-  const [username] = useState(user?.name || 'Student User');
-  const [email] = useState(user?.email || 'student@ecoclub.edu');
+  const [profile, setProfile] = useState({
+    name: user?.name || 'Student User',
+    email: user?.email || 'student@ecoclub.edu',
+    eco_points: user?.eco_points || 0,
+    role: user?.role || 'student'
+  });
   
-  const [events] = useState([
-    { 
-      id: 1, 
-      title: 'Beach Cleanup Drive', 
-      date: 'Feb 5, 2026', 
-      points: 50, 
-      registered: true,
-      location: 'Sunset Beach',
-      attendees: 180,
-      capacity: 250,
-      spotsLeft: 70,
-      description: 'Join us for a community beach cleanup event. Collect trash, earn eco-points, and help protect marine life. Make a difference in our coastal ecosystem.',
-      category: 'Cleanup',
-      organizer: 'Campus Eco-Club'
-    },
-    { 
-      id: 2, 
-      title: 'Tree Planting Event', 
-      date: 'Feb 12, 2026', 
-      points: 75, 
-      registered: true,
-      location: 'Central Park',
-      attendees: 425,
-      capacity: 500,
-      spotsLeft: 75,
-      description: 'Help us plant 100 trees in the local park. Make a lasting impact on our environment and contribute to a greener future for our community.',
-      category: 'Planting',
-      organizer: 'Green Future Society'
-    },
-    { 
-      id: 3, 
-      title: 'Recycling Workshop', 
-      date: 'Feb 20, 2026', 
-      points: 30, 
-      registered: false,
-      location: 'Community Center',
-      attendees: 220,
-      capacity: 300,
-      spotsLeft: 80,
-      description: 'Learn about proper recycling techniques and sustainable waste management practices. Interactive sessions with hands-on activities.',
-      category: 'Workshop',
-      organizer: 'Environmental Education Team'
-    }
-  ]);
+  const [events, setEvents] = useState([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [registeredEventsCount, setRegisteredEventsCount] = useState(0);
 
   const [achievements] = useState([
     { id: 1, title: 'Eco Warrior', description: 'Attended 10 events', icon: '🌟' },
@@ -75,9 +38,40 @@ function UserDashboard() {
 
   const totalPoints = 680;
 
-  // Fetch notifications on component mount
+  const handleLogout = async ()=> {
+    try {
+      const response = authAPI.logout();
+      console.log('response', response);
+      alert(`Thank you!, ${'Account logged successfully'}!`);
+      navigate('/');
+    } catch (error) {
+      const message = error.message;
+      alert(`Error Please Try Again, ${message}!`);
+    }
+  }
+
+  // Fetch notifications, events, and profile on component mount
   useEffect(() => {
     fetchNotifications();
+    fetchEvents();
+    fetchProfile();
+    fetchRegisteredEvents();
+  }, []);
+
+  // Refetch profile when window regains focus (after returning from EditProfile)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchProfile();
+    };
+    const handleProfileUpdate = () => {
+      fetchProfile();
+    };
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('profile-updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('profile-updated', handleProfileUpdate);
+    };
   }, []);
 
   const fetchNotifications = async () => {
@@ -89,6 +83,40 @@ function UserDashboard() {
       console.error('Error fetching notifications:', err);
     } finally {
       setLoadingNotifications(false);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      setLoadingEvents(true);
+      // Fetch only upcoming approved events
+      const response = await eventAPI.getAllEvents({ upcoming: true });
+      setEvents(response.events || []);
+    } catch (error) {
+      console.error('Failed to fetch events:', error);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  const fetchProfile = async () => {
+    try {
+      const data = await profileAPI.getProfile();
+      setProfile(data.user);
+      // Also update localStorage to keep it in sync
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...currentUser, ...data.user }));
+    } catch (error) {
+      console.error('Failed to fetch profile:', error);
+    }
+  };
+
+  const fetchRegisteredEvents = async () => {
+    try {
+      const data = await eventAPI.getMyRegisteredEvents();
+      setRegisteredEventsCount(data.events?.length || 0);
+    } catch (error) {
+      console.error('Failed to fetch registered events:', error);
     }
   };
 
@@ -105,10 +133,13 @@ function UserDashboard() {
               <h1 className="text-2xl font-bold text-gray-800">Campus Eco-Club Sustainability Tracker</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700 font-medium">{username}</span>
+              <span className="text-gray-700 font-medium">{profile.name}</span>
               <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
                 <User className="w-6 h-6 text-white" />
               </div>
+              <button onClick={handleLogout}>
+                <span className="text-gray-700 font-medium">{"Logout"}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -116,8 +147,8 @@ function UserDashboard() {
 
       {/* Dashboard Title */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">'{username.toUpperCase()}' DASHBOARD</h2>
-        <p className="text-gray-600">User Dashboard (Student)</p>
+        <h2 className="text-3xl font-bold text-gray-800 mb-2">'{profile.name.toUpperCase()}' DASHBOARD</h2>
+        <p className="text-gray-600">User Dashboard ({profile.role})</p>
       </div>
 
       {/* Navigation Tabs */}
@@ -203,66 +234,62 @@ function UserDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         {activeTab === 'events' && (
           <div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">My Registered Events</h3>
-            {events.filter(event => event.registered).length > 0 ? (
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">Joined Events</h3>
+            {loadingEvents ? (
+              <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                <p className="mt-4 text-gray-600">Loading events...</p>
+              </div>
+            ) : events.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {events.filter(event => event.registered).map((event) => (
-                  <div key={event.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-                    <div className="flex items-center justify-between mb-4">
-                      <Calendar className="w-8 h-8 text-green-600" />
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                        +{event.points} pts
-                      </span>
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
-                    <p className="text-gray-600 text-sm mb-4">{event.date}</p>
-                    <div className="flex gap-2">
+                {events.map((event) => {
+                  const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  });
+
+                  return (
+                    <div key={event.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                      <div className="flex items-center justify-between mb-4">
+                        <Calendar className="w-8 h-8 text-green-600" />
+                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                          +{event.eco_points_reward || 10} pts
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
+                      <p className="text-gray-600 text-sm mb-2">{eventDate}</p>
+                      {event.location && (
+                        <p className="text-gray-500 text-xs mb-4">{event.location}</p>
+                      )}
+                      <div className="mb-4 text-sm text-gray-600">
+                        <p className="font-semibold capitalize">{event.event_type}</p>
+                        <p>Organizer: {event.organizer_name || 'Campus Eco-Club'}</p>
+                        {event.max_participants && (
+                          <p className="text-xs mt-1">
+                            {event.spots_available} spots left
+                          </p>
+                        )}
+                      </div>
                       <button 
                         onClick={() => navigate('/event-detail', { 
                           state: { 
-                            event: {
-                              id: event.id,
-                              title: event.title,
-                              date: event.date,
-                              location: event.location || 'To be announced',
-                              attendees: event.attendees || 100,
-                              points: event.points,
-                              capacity: event.capacity || 150,
-                              spotsLeft: event.spotsLeft || 50,
-                              description: event.description || `Join us for ${event.title}. This is a great opportunity to contribute to environmental sustainability and earn eco-points.`,
-                              category: event.category || 'Environmental Event',
-                              organizer: event.organizer || 'Campus Eco-Club'
-                            }
+                            event: event
                           } 
                         })}
-                        className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition text-sm"
+                        className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition text-sm font-semibold"
                       >
                         View Details
                       </button>
-                      <button 
-                        onClick={() => {
-                          if (window.confirm(`Are you sure you want to cancel your registration for ${event.title}?`)) {
-                            alert(`Registration cancelled for ${event.title}`);
-                          }
-                        }}
-                        className="px-4 bg-red-100 text-red-700 py-2 rounded-lg hover:bg-red-200 transition text-sm"
-                      >
-                        Cancel
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">You haven't registered for any events yet.</p>
-                <button 
-                  onClick={() => navigate("/events")}
-                  className="mt-4 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-                >
-                  Browse Events
-                </button>
+                <p className="text-gray-600 text-lg">No upcoming approved events available.</p>
+                <p className="text-gray-500 mt-2">Check back soon for new events!</p>
               </div>
             )}
           </div>
@@ -271,7 +298,7 @@ function UserDashboard() {
         {activeTab === 'eco-points' && (
           <div className="bg-white rounded-lg shadow-md p-8">
             <div className="text-center mb-8">
-              <h3 className="text-6xl font-bold text-green-600 mb-2">{totalPoints}</h3>
+              <h3 className="text-6xl font-bold text-green-600 mb-2">{profile.eco_points || 0}</h3>
               <p className="text-gray-600 text-lg">Total Eco-Points</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -285,7 +312,7 @@ function UserDashboard() {
               </div>
               <div className="bg-green-50 rounded-lg p-6 text-center">
                 <p className="text-gray-600 mb-2">Events Attended</p>
-                <p className="text-3xl font-bold text-green-600">12</p>
+                <p className="text-3xl font-bold text-green-600">{registeredEventsCount}</p>
               </div>
             </div>
           </div>
@@ -319,7 +346,7 @@ function UserDashboard() {
                     <tr 
                       key={entry.id} 
                       className={`border-b hover:bg-gray-50 ${
-                        entry.name === username ? 'bg-green-50' : ''
+                        entry.name === profile.name ? 'bg-green-50' : ''
                       }`}
                     >
                       <td className="px-6 py-4">
@@ -377,21 +404,21 @@ function UserDashboard() {
               <div className="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center mb-4">
                 <User className="w-12 h-12 text-white" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-800">{username}</h3>
-              <p className="text-gray-600">Student</p>
+              <h3 className="text-2xl font-bold text-gray-800">{profile.name}</h3>
+              <p className="text-gray-600 capitalize">{profile.role}</p>
             </div>
             <div className="space-y-4">
               <div className="border-b pb-4">
                 <p className="text-gray-600 text-sm">Email</p>
-                <p className="text-gray-800 font-medium">{email}</p>
+                <p className="text-gray-800 font-medium">{profile.email}</p>
               </div>
               <div className="border-b pb-4">
                 <p className="text-gray-600 text-sm">Total Eco-Points</p>
-                <p className="text-gray-800 font-medium">{totalPoints} points</p>
+                <p className="text-gray-800 font-medium">{profile.eco_points || 0} points</p>
               </div>
               <div className="border-b pb-4">
                 <p className="text-gray-600 text-sm">Events Attended</p>
-                <p className="text-gray-800 font-medium">12 events</p>
+                <p className="text-gray-800 font-medium">{registeredEventsCount} events</p>
               </div>
               <button 
                 onClick={() => navigate("/edit-profile", { state: { role: 'student' } })}

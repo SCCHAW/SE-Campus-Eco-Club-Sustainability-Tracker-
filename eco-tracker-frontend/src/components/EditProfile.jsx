@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { User, Mail, Phone, Award, ArrowLeft, Save, Briefcase, Users } from "lucide-react";
+import { profileAPI } from "../services/api";
 
 function EditProfile() {
   const navigate = useNavigate();
@@ -30,51 +31,30 @@ function EditProfile() {
   });
 
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Initialize form data based on user role
+  // Fetch user profile data on mount
   useEffect(() => {
-    if (userRole === 'student') {
-      setFormData({
-        name: 'Sweeney',
-        email: 'sweeney@student.edu',
-        phone: '+1 234 567 8900',
-        address: '123 Campus Drive, University City',
-        studentId: 'STU2026001',
-        major: 'Environmental Science',
-        year: 'Junior',
-        skills: 'Environmental Conservation, Community Outreach',
-        bio: 'Passionate about environmental conservation and sustainability.',
-        emergencyContact: '+1 234 567 8901',
-        emergencyContactName: 'Parent/Guardian'
-      });
-    } else if (userRole === 'organizer') {
-      setFormData({
-        name: 'Event Organizer1',
-        email: 'admin@ecoclub.edu',
-        phone: '+1 234 567 8900',
-        address: '456 Admin Building, University City',
-        organization: 'Campus Eco-Club',
-        position: 'Event Coordinator',
-        department: 'Student Affairs',
-        skills: 'Event Management, Community Engagement, Environmental Planning',
-        bio: 'Dedicated to organizing impactful environmental events and fostering community engagement.',
-        emergencyContact: '+1 234 567 8901',
-        emergencyContactName: 'Emergency Contact'
-      });
-    } else {
-      // Volunteer
-      setFormData({
-        name: 'John Volunteer',
-        email: 'john@volunteer.org',
-        phone: '+1 234 567 8900',
-        address: '123 Green Street, Eco City',
-        skills: 'Environmental Conservation, Community Outreach',
-        bio: 'Passionate about environmental conservation and community service.',
-        emergencyContact: '+1 234 567 8901',
-        emergencyContactName: 'Jane Volunteer'
-      });
-    }
-  }, [userRole]);
+    const fetchProfileData = async () => {
+      try {
+        setLoading(true);
+        const data = await profileAPI.getProfile();
+        setFormData(prev => ({
+          ...prev,
+          name: data.user.name || '',
+          email: data.user.email || ''
+        }));
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+        alert('Failed to load profile data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfileData();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -106,13 +86,25 @@ function EditProfile() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (validateForm()) {
-      // Here you would typically send the data to your backend
-      alert('Profile updated successfully!');
-      navigate(-1); // Go back to previous page
+      try {
+        setSubmitting(true);
+        await profileAPI.updateProfile({
+          name: formData.name,
+          email: formData.email
+        });
+        alert('Profile updated successfully!');
+        // Trigger a custom event to notify parent components to refresh
+        window.dispatchEvent(new Event('profile-updated'));
+        navigate(-1); // Go back to previous page
+      } catch (error) {
+        alert(`Failed to update profile: ${error.message}`);
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -123,8 +115,8 @@ function EditProfile() {
   const getRoleColor = () => {
     switch(userRole) {
       case 'student': return 'green';
-      case 'organizer': return 'blue';
-      default: return 'purple';
+      case 'organizer': return 'green';
+      default: return 'blue';
     }
   };
 
@@ -142,7 +134,9 @@ function EditProfile() {
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
           </button>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Edit Profile</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            {userRole === 'volunteer' ? 'Volunteer Detail' : 'Edit Profile'}
+          </h1>
           <p className="text-gray-600">
             Update your personal information
             {userRole === 'student' && ' (Student)'}
@@ -454,10 +448,11 @@ function EditProfile() {
           <div className="flex gap-4 mt-8">
             <button
               type="submit"
-              className={`flex-1 flex items-center justify-center space-x-2 bg-${color}-600 text-white py-3 rounded-lg hover:bg-${color}-700 transition font-semibold`}
+              disabled={submitting}
+              className={`flex-1 flex items-center justify-center space-x-2 bg-${color}-600 text-white py-3 rounded-lg hover:bg-${color}-700 transition font-semibold ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Save className="w-5 h-5" />
-              <span>Save Changes</span>
+              <span>{submitting ? 'Saving...' : 'Save Changes'}</span>
             </button>
             <button
               type="button"

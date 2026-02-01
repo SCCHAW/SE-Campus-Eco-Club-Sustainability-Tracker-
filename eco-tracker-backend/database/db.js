@@ -28,6 +28,8 @@ function initializeDatabase() {
       console.log('✅ Database schema initialized');
       // Run migration to fix events table constraint
       migrateEventsTable();
+      // Add new columns if they don't exist
+      addEventColumns();
     }
   });
 }
@@ -94,6 +96,62 @@ function migrateEventsTable() {
       });
     } else {
       console.log('✅ Events table already has correct schema');
+    }
+  });
+}
+
+// Add new columns to events table
+function addEventColumns() {
+  db.get("PRAGMA table_info(events)", (err, row) => {
+    if (err) {
+      console.error('Error checking table info:', err.message);
+      return;
+    }
+  });
+
+  // Check if event_time column exists
+  db.all("PRAGMA table_info(events)", (err, columns) => {
+    if (err) {
+      console.error('Error checking columns:', err.message);
+      return;
+    }
+
+    const hasEventTime = columns.some(col => col.name === 'event_time');
+    const hasAgenda = columns.some(col => col.name === 'agenda');
+    const hasRequirements = columns.some(col => col.name === 'requirements');
+
+    if (!hasEventTime) {
+      db.run('ALTER TABLE events ADD COLUMN event_time TEXT', (err) => {
+        if (err) {
+          console.error('Error adding event_time column:', err.message);
+        } else {
+          console.log('✅ Added event_time column to events table');
+        }
+      });
+    }
+
+    if (!hasAgenda) {
+      db.run('ALTER TABLE events ADD COLUMN agenda TEXT', (err) => {
+        if (err) {
+          console.error('Error adding agenda column:', err.message);
+        } else {
+          console.log('✅ Added agenda column to events table');
+        }
+      });
+    }
+
+    if (!hasRequirements) {
+      db.run('ALTER TABLE events ADD COLUMN requirements TEXT', (err) => {
+        if (err) {
+          console.error('Error adding requirements column:', err.message);
+        } else {
+          console.log('✅ Added requirements column to events table');
+        }
+      });
+    }
+
+    if (hasEventTime && hasAgenda && hasRequirements) {
+      console.log('✅ All event columns already exist');
     }
   });
 }
