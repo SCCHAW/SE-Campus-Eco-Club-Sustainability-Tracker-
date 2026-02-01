@@ -30,6 +30,8 @@ function initializeDatabase() {
       migrateEventsTable();
       // Add new columns if they don't exist
       addEventColumns();
+      // Create event_announcements table if it doesn't exist
+      createAnnouncementsTable();
     }
   });
 }
@@ -152,6 +154,28 @@ function addEventColumns() {
 
     if (hasEventTime && hasAgenda && hasRequirements) {
       console.log('✅ All event columns already exist');
+    }
+  });
+}
+
+// Create event_announcements table if it doesn't exist
+function createAnnouncementsTable() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS event_announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Error creating event_announcements table:', err.message);
+    } else {
+      console.log('✅ Event announcements table ready');
     }
   });
 }

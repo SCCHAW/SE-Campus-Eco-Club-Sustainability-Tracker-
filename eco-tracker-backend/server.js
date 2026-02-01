@@ -8,6 +8,8 @@ import userRoutes from './routes/users.js';
 import eventRoutes from './routes/events.js';
 import notificationRoutes from './routes/notification.js';
 import profileRoutes from './routes/profile.js';
+import ecopointRoutes from './routes/ecopoint.js';
+import recyclingLogRoutes from './routes/recyclingLog.js';
 
 dotenv.config();
 
@@ -41,6 +43,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/ecopoints', ecopointRoutes);
+app.use('/api/recycling', recyclingLogRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -93,6 +93,18 @@ CREATE TABLE IF NOT EXISTS notifications (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Event announcements table (for notifications sent to future participants)
+CREATE TABLE IF NOT EXISTS event_announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_by INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 -- Insert default achievements
 INSERT OR IGNORE INTO achievements (id, name, description, icon, requirement_type, requirement_value, eco_points_reward) VALUES
 (1, 'First Steps', 'Register for your first event', '🌱', 'events', 1, 5),

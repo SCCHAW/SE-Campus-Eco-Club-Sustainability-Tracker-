@@ -11,7 +11,7 @@ import {
   Leaf,
   Send,
 } from "lucide-react";
-import { authAPI, eventAPI, notificationAPI } from "../services/api";
+import { authAPI, eventAPI, notificationAPI, recyclingAPI } from "../services/api";
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -22,36 +22,11 @@ function AdminDashboard() {
   const [username] = useState(user?.name || 'Admin User'); 
   const [email] = useState(user?.email || 'admin@ecoclub.edu');
 
-
-  const [recyclingLogs] = useState([
-    {
-      id: 1,
-      user: "Alice Wong",
-      event: "Beach Cleanup",
-      type: "Plastic",
-      weight: "5kg",
-      date: "Feb 1, 2026",
-      status: "Pending",
-    },
-    {
-      id: 2,
-      user: "Bob Chen",
-      event: "Tree Planting",
-      type: "Paper",
-      weight: "3kg",
-      date: "Feb 2, 2026",
-      status: "Pending",
-    },
-    {
-      id: 3,
-      user: "Sweeney",
-      event: "Recycling Workshop",
-      type: "Glass",
-      weight: "4kg",
-      date: "Jan 28, 2026",
-      status: "Verified",
-    },
-  ]);
+  const [recyclingLogs, setRecyclingLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState(null);
+  const [approvingLog, setApprovingLog] = useState(null);
+  const [ecoPointsInput, setEcoPointsInput] = useState({});
 
   const [users] = useState([
     {
@@ -96,6 +71,8 @@ function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'manage-events') {
       fetchEvents();
+    } else if (activeTab === 'verify-logs') {
+      fetchRecyclingLogs();
     }
   }, [activeTab]);
 
@@ -110,6 +87,20 @@ function AdminDashboard() {
       console.error('Error fetching events:', err);
     } finally {
       setLoadingEvents(false);
+    }
+  };
+
+  const fetchRecyclingLogs = async () => {
+    try {
+      setLoadingLogs(true);
+      const data = await recyclingAPI.getPendingLogs();
+      setRecyclingLogs(data.logs || []);
+      setLogsError(null);
+    } catch (err) {
+      setLogsError(err.message);
+      console.error('Error fetching recycling logs:', err);
+    } finally {
+      setLoadingLogs(false);
     }
   };
 
@@ -163,12 +154,40 @@ function AdminDashboard() {
     }
   };
 
-  const handleVerifyLog = (logId) => {
-    alert(`Recycling log #${logId} has been verified!`);
+  const handleVerifyLog = async (logId) => {
+    const points = ecoPointsInput[logId];
+    if (!points || points <= 0) {
+      alert('Please enter valid eco-points amount');
+      return;
+    }
+
+    try {
+      setApprovingLog(logId);
+      await recyclingAPI.approveLog(logId, parseInt(points));
+      alert('Recycling log approved successfully!');
+      // Refresh the logs list
+      fetchRecyclingLogs();
+      // Clear the input
+      setEcoPointsInput(prev => ({ ...prev, [logId]: '' }));
+    } catch (err) {
+      alert(`Error approving log: ${err.message}`);
+    } finally {
+      setApprovingLog(null);
+    }
   };
 
-  const handleRejectLog = (logId) => {
-    alert(`Recycling log #${logId} has been rejected!`);
+  const handleRejectLog = async (logId) => {
+    const reason = prompt('Enter reason for rejection (optional):');
+    if (reason === null) return; // User cancelled
+
+    try {
+      await recyclingAPI.rejectLog(logId, reason);
+      alert('Recycling log rejected successfully!');
+      // Refresh the logs list
+      fetchRecyclingLogs();
+    } catch (err) {
+      alert(`Error rejecting log: ${err.message}`);
+    }
   };
 
   const generateReport = () => {
@@ -317,83 +336,113 @@ function AdminDashboard() {
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      User
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Event
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Type
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Weight
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Date
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {recyclingLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-800">
-                        {log.user}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-800">
-                        {log.event}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-800">
-                        {log.type}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-800">
-                        {log.weight}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {log.date}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            log.status === "Verified"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
-                        >
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {log.status === "Pending" && (
+              {loadingLogs ? (
+                <div className="p-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+                  <p className="mt-4 text-gray-600">Loading recycling logs...</p>
+                </div>
+              ) : logsError ? (
+                <div className="p-12 text-center">
+                  <p className="text-red-600">{logsError}</p>
+                  <button 
+                    onClick={fetchRecyclingLogs}
+                    className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : recyclingLogs.length === 0 ? (
+                <div className="p-12 text-center">
+                  <p className="text-gray-600">No pending recycling logs to verify.</p>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        User
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Category
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Weight (kg)
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Description
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Eco-Points
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {recyclingLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm">
+                          <div>
+                            <p className="font-medium text-gray-800">{log.user_name}</p>
+                            <p className="text-xs text-gray-500 capitalize">{log.user_role}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-800 capitalize">
+                          {log.category}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-800">
+                          {log.weight} kg
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                          {log.description || 'No description'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {new Date(log.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </td>
+                        <td className="px-6 py-4">
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Points"
+                            value={ecoPointsInput[log.id] || ''}
+                            onChange={(e) => setEcoPointsInput(prev => ({
+                              ...prev,
+                              [log.id]: e.target.value
+                            }))}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-red-500"
+                          />
+                        </td>
+                        <td className="px-6 py-4">
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleVerifyLog(log.id)}
-                              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition"
+                              disabled={approvingLog === log.id}
+                              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              Verify
+                              {approvingLog === log.id ? 'Approving...' : 'Approve'}
                             </button>
                             <button
                               onClick={() => handleRejectLog(log.id)}
-                              className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition"
+                              disabled={approvingLog === log.id}
+                              className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Reject
                             </button>
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}

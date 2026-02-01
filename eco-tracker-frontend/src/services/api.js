@@ -136,17 +136,12 @@ export const userAPI = {
 
 // Recycling API calls
 export const recyclingAPI = {
-  // Submit recycling log with image
-  submitLog: async (formData) => {
-    const token = getAuthToken();
-    
+  // Submit recycling log
+  submitLog: async (logData) => {
     const response = await fetch(`${API_URL}/recycling/submit`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        // Don't set Content-Type for FormData - browser will set it automatically
-      },
-      body: formData, // FormData object
+      headers: getHeaders(true),
+      body: JSON.stringify(logData),
     });
     
     const data = await response.json();
@@ -168,6 +163,91 @@ export const recyclingAPI = {
     
     if (!response.ok) {
       throw new Error(data.error || 'Failed to fetch logs');
+    }
+    
+    return data;
+  },
+
+  // Get all recycling logs (admin only)
+  getAllLogs: async (filters = {}) => {
+    const queryParams = new URLSearchParams();
+    if (filters.status) queryParams.append('status', filters.status);
+    if (filters.category) queryParams.append('category', filters.category);
+    if (filters.user_id) queryParams.append('user_id', filters.user_id);
+
+    const response = await fetch(`${API_URL}/recycling?${queryParams}`, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch logs');
+    }
+    
+    return data;
+  },
+
+  // Get pending recycling logs (admin only)
+  getPendingLogs: async () => {
+    const response = await fetch(`${API_URL}/recycling/pending`, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch pending logs');
+    }
+    
+    return data;
+  },
+
+  // Approve recycling log (admin only)
+  approveLog: async (logId, ecoPoints) => {
+    const response = await fetch(`${API_URL}/recycling/${logId}/approve`, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: JSON.stringify({ eco_points: ecoPoints }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to approve log');
+    }
+    
+    return data;
+  },
+
+  // Reject recycling log (admin only)
+  rejectLog: async (logId, reason) => {
+    const response = await fetch(`${API_URL}/recycling/${logId}/reject`, {
+      method: 'PATCH',
+      headers: getHeaders(true),
+      body: JSON.stringify({ reason }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to reject log');
+    }
+    
+    return data;
+  },
+
+  // Delete recycling log
+  deleteLog: async (logId) => {
+    const response = await fetch(`${API_URL}/recycling/${logId}`, {
+      method: 'DELETE',
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to delete log');
     }
     
     return data;
@@ -530,6 +610,94 @@ export const profileAPI = {
   },
 };
 
+// Eco-points API calls
+export const ecopointAPI = {
+  // Get my eco-points and stats
+  getMyPoints: async () => {
+    const response = await fetch(`${API_URL}/ecopoints/my-points`, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch eco-points');
+    }
+    
+    return data;
+  },
+
+  // Get leaderboard
+  getLeaderboard: async (limit = 10, role = null) => {
+    const queryParams = new URLSearchParams();
+    if (limit) queryParams.append('limit', limit);
+    if (role) queryParams.append('role', role);
+    
+    const response = await fetch(`${API_URL}/ecopoints/leaderboard?${queryParams}`, {
+      headers: getHeaders(),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch leaderboard');
+    }
+    
+    return data;
+  },
+
+  // Get my rank and nearby competitors
+  getMyRank: async () => {
+    const response = await fetch(`${API_URL}/ecopoints/my-rank`, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch rank');
+    }
+    
+    return data;
+  },
+
+  // Award eco-points (organizer/admin only)
+  awardPoints: async (userId, points, reason) => {
+    const response = await fetch(`${API_URL}/ecopoints/award`, {
+      method: 'POST',
+      headers: getHeaders(true),
+      body: JSON.stringify({ user_id: userId, points, reason }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to award points');
+    }
+    
+    return data;
+  },
+
+  // Get eco-points history
+  getHistory: async (userId = null) => {
+    const url = userId 
+      ? `${API_URL}/ecopoints/history/${userId}`
+      : `${API_URL}/ecopoints/history`;
+      
+    const response = await fetch(url, {
+      headers: getHeaders(true),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch history');
+    }
+    
+    return data;
+  },
+};
+
 export default {
   auth: authAPI,
   user: userAPI,
@@ -537,4 +705,5 @@ export default {
   event: eventAPI,
   notification: notificationAPI,
   profile: profileAPI,
+  ecopoint: ecopointAPI,
 };

@@ -97,8 +97,14 @@ function VolunteerDashboard() {
   const fetchEvents = async () => {
     try {
       setLoadingEvents(true);
+      // Fetch all available events (upcoming and ongoing)
       const data = await eventAPI.getAllEvents({ upcoming: true });
-      setUpcomingEvents(data.events || []);
+      // Filter to only show approved events
+      const availableEvents = (data.events || []).filter(event => 
+        event.status === 'approved' || event.status === 'upcoming' || event.status === 'ongoing'
+      );
+      console.log('All upcoming events:', availableEvents);
+      setUpcomingEvents(availableEvents);
     } catch (error) {
       console.error('Failed to fetch events:', error);
     } finally {
@@ -109,6 +115,7 @@ function VolunteerDashboard() {
   const fetchRegisteredEvents = async () => {
     try {
       const data = await eventAPI.getMyRegisteredEvents();
+      console.log('Registered events:', data.events);
       setRegisteredEvents(data.events || []);
     } catch (error) {
       console.error('Failed to fetch registered events:', error);
@@ -200,15 +207,15 @@ function VolunteerDashboard() {
             </button>
             
             <button
-              onClick={() => setActiveTab('register-event')}
+              onClick={() => setActiveTab('joined-events')}
               className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-semibold transition ${
-                activeTab === 'register-event'
+                activeTab === 'joined-events'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               <Calendar className="w-5 h-5" />
-              <span>REGISTER</span>
+              <span>JOINED EVENTS</span>
             </button>
             
             <button
@@ -266,50 +273,131 @@ function VolunteerDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         {activeTab === 'view-events' && (
           <div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">Upcoming Events</h3>
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">All Available Events</h3>
             {loadingEvents ? (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                 <p className="mt-4 text-gray-600">Loading events...</p>
               </div>
-            ) : upcomingEvents.length > 0 ? (
+            ) : (() => {
+              // Filter out events that the volunteer has already joined
+              const unregisteredEvents = upcomingEvents.filter(event => 
+                !registeredEvents.some(re => re.event_id === event.id)
+              );
+              console.log('Unregistered events to display:', unregisteredEvents);
+              console.log('Filtering - upcomingEvents IDs:', upcomingEvents.map(e => e.id));
+              console.log('Filtering - registeredEvents IDs:', registeredEvents.map(e => e.event_id));
+              
+              return unregisteredEvents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {unregisteredEvents.map((event) => {
+                    const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    });
+                    const availableSlots = event.max_participants 
+                      ? event.max_participants - (event.participant_count || 0)
+                      : 'Open';
+                    
+                    return (
+                      <div key={event.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                        <div className="flex items-center justify-between mb-4">
+                          <Calendar className="w-8 h-8 text-blue-600" />
+                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">
+                            {availableSlots === 'Open' ? 'Open' : `${availableSlots} slots`}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
+                        <div className="space-y-1 text-sm text-gray-600 mb-4">
+                          <p><span className="font-semibold">Date:</span> {eventDate}</p>
+                          <p><span className="font-semibold">Location:</span> {event.location}</p>
+                          <p><span className="font-semibold">Status:</span> <span className="capitalize">{event.status}</span></p>
+                        </div>
+                        <button 
+                          onClick={() => navigate('/event-detail', { state: { event } })}
+                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
+                        >
+                          View & Register
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg">No events available to join.</p>
+                  <p className="text-gray-500 mt-2">You have joined all available events or check back soon for new events!</p>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {activeTab === 'joined-events' && (
+          <div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">Joined Events</h3>
+            {registeredEvents.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {upcomingEvents.map((event) => {
-                  const isRegistered = registeredEvents.some(re => re.event_id === event.id);
+                {registeredEvents.map((event) => {
                   const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric'
                   });
-                  const availableSlots = event.max_participants 
-                    ? event.max_participants - (event.participant_count || 0)
-                    : 'Open';
+                  const eventTime = new Date(event.event_date).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
                   
                   return (
-                    <div key={event.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                    <div key={event.event_id || event.id || index} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition border-2 border-green-200">
                       <div className="flex items-center justify-between mb-4">
-                        <Calendar className="w-8 h-8 text-blue-600" />
-                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">
-                          {availableSlots === 'Open' ? 'Open' : `${availableSlots} slots`}
+                        <Calendar className="w-8 h-8 text-green-600" />
+                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                          ✓ Registered
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
-                      <div className="space-y-1 text-sm text-gray-600 mb-4">
+                      <h4 className="text-lg font-bold text-gray-800 mb-3">{event.event_title || event.title || 'Untitled Event'}</h4>
+                      <div className="space-y-2 text-sm text-gray-600 mb-4">
                         <p><span className="font-semibold">Date:</span> {eventDate}</p>
-                        <p><span className="font-semibold">Location:</span> {event.location}</p>
+                        <p><span className="font-semibold">Time:</span> {eventTime}</p>
+                        <p><span className="font-semibold">Location:</span> {event.event_location || event.location || 'Not specified'}</p>
+                        <p><span className="font-semibold">Status:</span> <span className="capitalize text-blue-600">{event.event_status || event.status || 'upcoming'}</span></p>
+                        {(event.event_description || event.description) && (
+                          <p className="text-xs text-gray-500 mt-2 line-clamp-2">{event.event_description || event.description}</p>
+                        )}
                       </div>
-                      {isRegistered ? (
-                        <div className="w-full bg-green-100 text-green-700 py-2 rounded-lg text-center font-semibold">
-                          ✓ Registered
-                        </div>
-                      ) : (
-                        <button 
-                          onClick={() => navigate('/event-detail', { state: { event } })}
-                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-                        >
-                          View Details
-                        </button>
-                      )}
+                      <button 
+                        onClick={async () => {
+                          const eventId = event.event_id || event.id;
+                          try {
+                            // Fetch the full event details using the event ID
+                            const eventData = await eventAPI.getEventById(eventId);
+                            navigate('/event-detail', { state: { event: eventData.event } });
+                          } catch (error) {
+                            console.error('Failed to fetch event details:', error);
+                            // Fallback: use the data we have
+                            navigate('/event-detail', { 
+                              state: { 
+                                event: { 
+                                  id: eventId, 
+                                  title: event.event_title || event.title, 
+                                  event_date: event.event_date, 
+                                  location: event.event_location || event.location, 
+                                  description: event.event_description || event.description,
+                                  status: event.event_status || event.status,
+                                  organizer_name: event.organizer_name
+                                } 
+                              } 
+                            });
+                          }
+                        }}
+                        className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium"
+                      >
+                        View Full Details
+                      </button>
                     </div>
                   );
                 })}
@@ -317,50 +405,10 @@ function VolunteerDashboard() {
             ) : (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">No upcoming events available.</p>
-                <p className="text-gray-500 mt-2">Check back soon for new events!</p>
+                <p className="text-gray-600 text-lg">You haven't registered for any events yet.</p>
+                <p className="text-gray-500 mt-2">Browse available events in the "VIEW EVENTS" tab!</p>
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === 'register-event' && (
-          <div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">Register for Events</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {upcomingEvents.filter(event => !registeredEvents.some(re => re.event_id === event.id)).map((event) => {
-                const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric'
-                });
-                const availableSlots = event.max_participants 
-                  ? event.max_participants - (event.participant_count || 0)
-                  : 'Unlimited';
-                
-                return (
-                  <div key={event.id} className="bg-white rounded-lg shadow-md p-6">
-                    <h4 className="text-xl font-bold text-gray-800 mb-3">{event.title}</h4>
-                    <div className="space-y-2 text-sm text-gray-600 mb-4">
-                      <p><span className="font-semibold">Date:</span> {eventDate}</p>
-                      <p><span className="font-semibold">Location:</span> {event.location}</p>
-                      <p><span className="font-semibold">Available Slots:</span> {availableSlots}</p>
-                    </div>
-                    <button 
-                      onClick={() => navigate('/event-detail', { state: { event } })}
-                      className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
-                    >
-                      View & Register
-                    </button>
-                  </div>
-                );
-              })}
-              {upcomingEvents.filter(event => !registeredEvents.some(re => re.event_id === event.id)).length === 0 && (
-                <div className="col-span-2 text-center py-8">
-                  <p className="text-gray-600">No available events to register for.</p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -378,7 +426,7 @@ function VolunteerDashboard() {
                 >
                   <option value="">Choose an event</option>
                   {registeredEvents.map((event) => (
-                    <option key={event.event_id} value={event.event_title}>{event.event_title}</option>
+                    <option key={event.event_id || event.id} value={event.event_title || event.title}>{event.event_title || event.title}</option>
                   ))}
                 </select>
               </div>
@@ -450,8 +498,8 @@ function VolunteerDashboard() {
                       });
                       
                       return (
-                        <tr key={event.event_id} className="border-b hover:bg-gray-50">
-                          <td className="px-6 py-4 font-medium text-gray-800">{event.event_title}</td>
+                        <tr key={event.event_id || event.id} className="border-b hover:bg-gray-50">
+                          <td className="px-6 py-4 font-medium text-gray-800">{event.event_title || event.title}</td>
                           <td className="px-6 py-4 text-gray-600">{eventDate}</td>
                           <td className="px-6 py-4 font-semibold text-blue-600">3 hrs</td>
                           <td className="px-6 py-4">

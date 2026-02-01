@@ -115,50 +115,66 @@ router.post('/event/:eventId', authenticateToken, authorizeRoles('organizer'), (
       return res.status(403).json({ error: 'You can only send notifications for your own events' });
     }
     
-    // Get all participants for this event
-    const participantsQuery = `
-      SELECT DISTINCT user_id
-      FROM event_participants
-      WHERE event_id = ?
+    // Store the announcement for future participants
+    const storeAnnouncementQuery = `
+      INSERT INTO event_announcements (event_id, title, message, created_by)
+      VALUES (?, ?, ?, ?)
     `;
     
-    db.all(participantsQuery, [eventId], (err, participants) => {
+    db.run(storeAnnouncementQuery, [eventId, title, message, organizerId], (err) => {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        console.error('Failed to store announcement:', err);
+        return res.status(500).json({ error: 'Failed to store announcement' });
       }
       
-      if (participants.length === 0) {
-        return res.status(404).json({ error: 'No participants found for this event' });
-      }
-      
-      // Insert notification for each participant
-      const insertQuery = `
-        INSERT INTO notifications (user_id, title, message, type)
-        VALUES (?, ?, ?, 'event')
+      // Get all participants for this event
+      const participantsQuery = `
+        SELECT DISTINCT user_id
+        FROM event_participants
+        WHERE event_id = ?
       `;
       
-      const stmt = db.prepare(insertQuery);
-      let successCount = 0;
-      let errorOccurred = false;
-      
-      participants.forEach((participant, index) => {
-        stmt.run([participant.user_id, title, message], (err) => {
-          if (err && !errorOccurred) {
-            errorOccurred = true;
-            stmt.finalize();
-            return res.status(500).json({ error: 'Failed to send notifications' });
-          }
-          
-          successCount++;
-          
-          // If this is the last participant and no errors occurred
-          if (index === participants.length - 1 && !errorOccurred) {
-            stmt.finalize();
-            res.json({ 
-              message: `Notification sent to ${successCount} participant(s)`,
-              recipientCount: successCount 
-            });
-          }
+      db.all(participantsQuery, [eventId], (err, participants) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        
+        if (participants.length === 0) {
+          return res.json({ 
+            message: 'Announcement saved. No current participants to notify.',
+            recipientCount: 0 
+          });
+        }
+        
+        // Insert notification for each participant
+        const insertQuery = `
+          INSERT INTO notifications (user_id, title, message, type)
+          VALUES (?, ?, ?, 'event')
+        `;
+        
+        const stmt = db.prepare(insertQuery);
+        let successCount = 0;
+        let errorOccurred = false;
+        
+        participants.forEach((participant, index) => {
+          stmt.run([participant.user_id, title, message], (err) => {
+            if (err && !errorOccurred) {
+              errorOccurred = true;
+              stmt.finalize();
+              return res.status(500).json({ error: 'Failed to send notifications' });
+            }
+            
+            successCount++;
+            
+            // If this is the last participant and no errors occurred
+            if (index === participants.length - 1 && !errorOccurred) {
+              stmt.finalize();
+              res.json({ 
+                message: `Announcement saved and sent to ${successCount} participant(s)`,
+                recipientCount: successCount 
+              });
+            }
+          });
         });
       });
     });

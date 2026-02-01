@@ -335,7 +335,26 @@ router.post('/:id/register', authenticateToken, async (req, res) => {
       [req.params.id, req.user.id]
     );
 
-    res.status(201).json({ message: 'Successfully registered for event' });
+    // Check for stored announcements and send them to the new participant
+    const announcements = await dbAll(
+      'SELECT * FROM event_announcements WHERE event_id = ? ORDER BY created_at ASC',
+      [req.params.id]
+    );
+
+    if (announcements && announcements.length > 0) {
+      // Send all stored announcements to the new participant
+      for (const announcement of announcements) {
+        await dbRun(
+          'INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)',
+          [req.user.id, announcement.title, announcement.message, 'event']
+        );
+      }
+    }
+
+    res.status(201).json({ 
+      message: 'Successfully registered for event',
+      announcementsReceived: announcements ? announcements.length : 0
+    });
   } catch (error) {
     console.error('Event registration error:', error);
     res.status(500).json({ error: 'Server error' });

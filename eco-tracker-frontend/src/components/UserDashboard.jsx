@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, Trophy, Award, Bell, User, Leaf } from "lucide-react";
-import { notificationAPI, eventAPI, profileAPI, authAPI } from "../services/api";
+import { Calendar, Trophy, Award, Bell, User, Leaf, Recycle } from "lucide-react";
+import { notificationAPI, eventAPI, profileAPI, authAPI, ecopointAPI, recyclingAPI } from "../services/api";
 
 function UserDashboard() {
   const navigate = useNavigate();
@@ -25,18 +25,28 @@ function UserDashboard() {
     { id: 3, title: 'Clean Champion', description: 'Completed 5 cleanups', icon: '🏆' }
   ]);
 
-  const [leaderboard] = useState([
-    { id: 1, name: 'Alice Wong', points: 850, rank: 1 },
-    { id: 2, name: 'Bob Chen', points: 720, rank: 2 },
-    { id: 3, name: 'Sweeney', points: 680, rank: 3 },
-    { id: 4, name: 'Diana Lee', points: 550, rank: 4 },
-    { id: 5, name: 'Eric Tan', points: 490, rank: 5 }
-  ]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [ecoPointsStats, setEcoPointsStats] = useState({
+    eco_points: 0,
+    monthly_points: 0,
+    weekly_points: 0,
+    events_attended: 0,
+    rank: 0
+  });
 
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
 
-  const totalPoints = 680;
+  // Recycling log states
+  const [recyclingLogs, setRecyclingLogs] = useState([]);
+  const [loadingRecyclingLogs, setLoadingRecyclingLogs] = useState(false);
+  const [submittingLog, setSubmittingLog] = useState(false);
+  const [recyclingForm, setRecyclingForm] = useState({
+    category: 'plastic',
+    weight_kg: '',
+    description: ''
+  });
 
   const handleLogout = async ()=> {
     try {
@@ -55,7 +65,9 @@ function UserDashboard() {
     fetchNotifications();
     fetchEvents();
     fetchProfile();
-    fetchRegisteredEvents();
+    fetchEcoPoints();
+    fetchLeaderboard();
+    fetchRecyclingLogs();
   }, []);
 
   // Refetch profile when window regains focus (after returning from EditProfile)
@@ -89,9 +101,12 @@ function UserDashboard() {
   const fetchEvents = async () => {
     try {
       setLoadingEvents(true);
-      // Fetch only upcoming approved events
-      const response = await eventAPI.getAllEvents({ upcoming: true });
+      // Fetch only events the student has joined
+      const response = await eventAPI.getMyRegisteredEvents();
+      console.log('Registered events response:', response);
+      console.log('Registered events data:', response.events);
       setEvents(response.events || []);
+      setRegisteredEventsCount(response.events?.length || 0);
     } catch (error) {
       console.error('Failed to fetch events:', error);
     } finally {
@@ -112,11 +127,70 @@ function UserDashboard() {
   };
 
   const fetchRegisteredEvents = async () => {
+    // This is now handled in fetchEvents
+    // Kept for compatibility but does nothing
+  };
+
+  const fetchEcoPoints = async () => {
     try {
-      const data = await eventAPI.getMyRegisteredEvents();
-      setRegisteredEventsCount(data.events?.length || 0);
+      const data = await ecopointAPI.getMyPoints();
+      setEcoPointsStats(data);
     } catch (error) {
-      console.error('Failed to fetch registered events:', error);
+      console.error('Failed to fetch eco-points:', error);
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    try {
+      setLoadingLeaderboard(true);
+      const data = await ecopointAPI.getLeaderboard(10);
+      setLeaderboard(data.leaderboard || []);
+    } catch (error) {
+      console.error('Failed to fetch leaderboard:', error);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
+  const fetchRecyclingLogs = async () => {
+    try {
+      setLoadingRecyclingLogs(true);
+      const data = await recyclingAPI.getMyLogs();
+      setRecyclingLogs(data.logs || []);
+    } catch (error) {
+      console.error('Failed to fetch recycling logs:', error);
+    } finally {
+      setLoadingRecyclingLogs(false);
+    }
+  };
+
+  const handleRecyclingFormChange = (e) => {
+    const { name, value } = e.target;
+    setRecyclingForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmitRecyclingLog = async (e) => {
+    e.preventDefault();
+    
+    if (!recyclingForm.weight_kg || recyclingForm.weight_kg <= 0) {
+      alert('Please enter a valid weight');
+      return;
+    }
+
+    try {
+      setSubmittingLog(true);
+      await recyclingAPI.submitLog({
+        category: recyclingForm.category,
+        weight_kg: parseFloat(recyclingForm.weight_kg),
+        description: recyclingForm.description
+      });
+      alert('Recycling log submitted successfully! Waiting for admin approval.');
+      setRecyclingForm({ category: 'plastic', weight_kg: '', description: '' });
+      fetchRecyclingLogs(); // Refresh the list
+    } catch (error) {
+      alert(`Error submitting log: ${error.message}`);
+    } finally {
+      setSubmittingLog(false);
     }
   };
 
@@ -154,7 +228,7 @@ function UserDashboard() {
       {/* Navigation Tabs */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-lg shadow-md p-2 mb-6">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
             <button
               onClick={() => setActiveTab('events')}
               className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-semibold transition ${
@@ -216,6 +290,18 @@ function UserDashboard() {
             </button>
             
             <button
+              onClick={() => setActiveTab('recycling')}
+              className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-semibold transition ${
+                activeTab === 'recycling'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Recycle className="w-5 h-5" />
+              <span>RECYCLING</span>
+            </button>
+            
+            <button
               onClick={() => setActiveTab('profile')}
               className={`flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-semibold transition ${
                 activeTab === 'profile'
@@ -242,44 +328,67 @@ function UserDashboard() {
               </div>
             ) : events.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {events.map((event) => {
+                {events.map((event, index) => {
+                  console.log(`Event ${index}:`, event);
+                  console.log(`Event ID field:`, event.event_id);
+                  console.log(`All event keys:`, Object.keys(event));
+                  
                   const eventDate = new Date(event.event_date).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric'
                   });
+                  const eventTime = new Date(event.event_date).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
 
-                  return (
-                    <div key={event.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
+                  return ( 
+                    <div key={event.event_id || event.id || index} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition border-2 border-green-200">
                       <div className="flex items-center justify-between mb-4">
                         <Calendar className="w-8 h-8 text-green-600" />
                         <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                          +{event.eco_points_reward || 10} pts
+                          ✓ Joined
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-800 mb-2">{event.title}</h3>
-                      <p className="text-gray-600 text-sm mb-2">{eventDate}</p>
-                      {event.location && (
-                        <p className="text-gray-500 text-xs mb-4">{event.location}</p>
-                      )}
-                      <div className="mb-4 text-sm text-gray-600">
-                        <p className="font-semibold capitalize">{event.event_type}</p>
-                        <p>Organizer: {event.organizer_name || 'Campus Eco-Club'}</p>
-                        {event.max_participants && (
-                          <p className="text-xs mt-1">
-                            {event.spots_available} spots left
-                          </p>
-                        )}
+                      <h3 className="text-lg font-bold text-gray-800 mb-2">{event.event_title || event.title || 'Untitled Event'}</h3>
+                      <div className="space-y-1 text-sm text-gray-600 mb-4">
+                        <p><span className="font-semibold">Date:</span> {eventDate}</p>
+                        <p><span className="font-semibold">Time:</span> {eventTime}</p>
+                        <p><span className="font-semibold">Location:</span> {event.event_location || event.location || 'Not specified'}</p>
+                        <p><span className="font-semibold">Status:</span> <span className="capitalize text-green-600">{event.event_status || event.status || 'upcoming'}</span></p>
                       </div>
                       <button 
-                        onClick={() => navigate('/event-detail', { 
-                          state: { 
-                            event: event
-                          } 
-                        })}
+                        onClick={async () => {
+                          const eventId = event.event_id || event.id;
+                          console.log('Attempting to fetch event with ID:', eventId);
+                          console.log('Full event object:', event);
+                          
+                          try {
+                            // Fetch the full event details using the event ID
+                            const eventData = await eventAPI.getEventById(eventId);
+                            navigate('/event-detail', { state: { event: eventData.event } });
+                          } catch (error) {
+                            console.error('Failed to fetch event details:', error);
+                            // Fallback: use the data we have
+                            navigate('/event-detail', { 
+                              state: { 
+                                event: { 
+                                  id: eventId, 
+                                  title: event.event_title || event.title, 
+                                  event_date: event.event_date, 
+                                  location: event.event_location || event.location,
+                                  description: event.event_description || event.description,
+                                  status: event.event_status || event.status,
+                                  organizer_name: event.organizer_name
+                                } 
+                              } 
+                            });
+                          }
+                        }}
                         className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition text-sm font-semibold"
                       >
-                        View Details
+                        View Full Details
                       </button>
                     </div>
                   );
@@ -288,8 +397,8 @@ function UserDashboard() {
             ) : (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-lg">No upcoming approved events available.</p>
-                <p className="text-gray-500 mt-2">Check back soon for new events!</p>
+                <p className="text-gray-600 text-lg">You haven't joined any events yet.</p>
+                <p className="text-gray-500 mt-2">Browse and register for events to get started!</p>
               </div>
             )}
           </div>
@@ -298,21 +407,21 @@ function UserDashboard() {
         {activeTab === 'eco-points' && (
           <div className="bg-white rounded-lg shadow-md p-8">
             <div className="text-center mb-8">
-              <h3 className="text-6xl font-bold text-green-600 mb-2">{profile.eco_points || 0}</h3>
+              <h3 className="text-6xl font-bold text-green-600 mb-2">{ecoPointsStats.eco_points || 0}</h3>
               <p className="text-gray-600 text-lg">Total Eco-Points</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-green-50 rounded-lg p-6 text-center">
                 <p className="text-gray-600 mb-2">This Month</p>
-                <p className="text-3xl font-bold text-green-600">150</p>
+                <p className="text-3xl font-bold text-green-600">{ecoPointsStats.monthly_points || 0}</p>
               </div>
               <div className="bg-green-50 rounded-lg p-6 text-center">
                 <p className="text-gray-600 mb-2">This Week</p>
-                <p className="text-3xl font-bold text-green-600">50</p>
+                <p className="text-3xl font-bold text-green-600">{ecoPointsStats.weekly_points || 0}</p>
               </div>
               <div className="bg-green-50 rounded-lg p-6 text-center">
                 <p className="text-gray-600 mb-2">Events Attended</p>
-                <p className="text-3xl font-bold text-green-600">{registeredEventsCount}</p>
+                <p className="text-3xl font-bold text-green-600">{ecoPointsStats.events_attended || 0}</p>
               </div>
             </div>
           </div>
@@ -332,37 +441,52 @@ function UserDashboard() {
 
         {activeTab === 'leaderboard' && (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-green-600 text-white">
-                  <tr>
-                    <th className="px-6 py-4 text-left">Rank</th>
-                    <th className="px-6 py-4 text-left">Name</th>
-                    <th className="px-6 py-4 text-right">Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((entry) => (
-                    <tr 
-                      key={entry.id} 
-                      className={`border-b hover:bg-gray-50 ${
-                        entry.name === profile.name ? 'bg-green-50' : ''
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <span className={`font-bold ${
-                          entry.rank <= 3 ? 'text-green-600' : 'text-gray-600'
-                        }`}>
-                          #{entry.rank}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 font-medium text-gray-800">{entry.name}</td>
-                      <td className="px-6 py-4 text-right font-semibold text-green-600">{entry.points}</td>
+            {loadingLeaderboard ? (
+              <div className="p-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                <p className="mt-4 text-gray-600">Loading leaderboard...</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-green-600 text-white">
+                    <tr>
+                      <th className="px-6 py-4 text-left">Rank</th>
+                      <th className="px-6 py-4 text-left">Name</th>
+                      <th className="px-6 py-4 text-right">Points</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {leaderboard.length > 0 ? (
+                      leaderboard.map((entry) => (
+                        <tr 
+                          key={entry.id} 
+                          className={`border-b hover:bg-gray-50 ${
+                            entry.name === profile.name ? 'bg-green-50' : ''
+                          }`}
+                        >
+                          <td className="px-6 py-4">
+                            <span className={`font-bold ${
+                              entry.rank <= 3 ? 'text-green-600' : 'text-gray-600'
+                            }`}>
+                              #{entry.rank}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-medium text-gray-800">{entry.name}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-green-600">{entry.eco_points || 0}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="3" className="px-6 py-8 text-center text-gray-600">
+                          No leaderboard data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -395,6 +519,128 @@ function UserDashboard() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {activeTab === 'recycling' && (
+          <div className="space-y-6">
+            {/* Submit Recycling Log Form */}
+            <div className="bg-white rounded-lg shadow-md p-8">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">Submit Recycling Log</h3>
+              <form onSubmit={handleSubmitRecyclingLog} className="space-y-4">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">Category</label>
+                  <select
+                    name="category"
+                    value={recyclingForm.category}
+                    onChange={handleRecyclingFormChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                    required
+                  >
+                    <option value="plastic">Plastic</option>
+                    <option value="paper">Paper</option>
+                    <option value="metal">Metal</option>
+                    <option value="glass">Glass</option>
+                    <option value="electronics">Electronics</option>
+                    <option value="organic">Organic</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">Weight (kg)</label>
+                  <input
+                    type="number"
+                    name="weight_kg"
+                    value={recyclingForm.weight_kg}
+                    onChange={handleRecyclingFormChange}
+                    step="0.01"
+                    min="0.01"
+                    placeholder="Enter weight in kg"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-medium mb-2">Description (Optional)</label>
+                  <textarea
+                    name="description"
+                    value={recyclingForm.description}
+                    onChange={handleRecyclingFormChange}
+                    rows="3"
+                    placeholder="Add any additional details..."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={submittingLog}
+                  className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {submittingLog ? 'Submitting...' : 'Submit Recycling Log'}
+                </button>
+              </form>
+            </div>
+
+            {/* My Recycling Logs */}
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-6 border-b">
+                <h3 className="text-2xl font-bold text-gray-800">My Recycling Logs</h3>
+              </div>
+              {loadingRecyclingLogs ? (
+                <div className="p-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                  <p className="mt-4 text-gray-600">Loading logs...</p>
+                </div>
+              ) : recyclingLogs.length === 0 ? (
+                <div className="p-12 text-center">
+                  <Recycle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No recycling logs yet. Submit your first log above!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-green-600 text-white">
+                      <tr>
+                        <th className="px-6 py-4 text-left">Date</th>
+                        <th className="px-6 py-4 text-left">Category</th>
+                        <th className="px-6 py-4 text-right">Weight (kg)</th>
+                        <th className="px-6 py-4 text-left">Description</th>
+                        <th className="px-6 py-4 text-center">Status</th>
+                        <th className="px-6 py-4 text-right">Points Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recyclingLogs.map((log) => (
+                        <tr key={log.id} className="border-b hover:bg-gray-50">
+                          <td className="px-6 py-4 text-gray-700">
+                            {new Date(log.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="capitalize text-gray-800 font-medium">{log.category}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right text-gray-700">{log.weight_kg}</td>
+                          <td className="px-6 py-4 text-gray-600">{log.description || '-'}</td>
+                          <td className="px-6 py-4 text-center">
+                            {log.verified ? (
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                ✓ Approved
+                              </span>
+                            ) : (
+                              <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                ⏳ Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right font-semibold text-green-600">
+                            {log.eco_points_earned || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
